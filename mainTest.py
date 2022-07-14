@@ -213,6 +213,7 @@ def read_daq(sec, channel, thresh, comparator):
 
 # Check if door is closed and close it if its not
 if(read_daq(3,'ai0',2.2,'>')):
+    print('DOOR OPEN BEFORE TESTING STARTED: CLOSING DOOR...')
     GPIO.output(DOOR_A, GPIO.LOW)
     GPIO.output(DOOR_B, GPIO.HIGH)
     sleep(4)
