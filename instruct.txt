@@ -1,4 +1,4 @@
-'TAP'|tap|'POP',1|'NONE',0|'NONE',0
+'TAP'|tap|'WAIT',1|'NONE',0|'NONE',0
 'WAIT'|tap|'COOLER',1|'NONE',0|ai0:>2.2,1
 'COOLER'|open_door|'NONE',0|'SerialShop.lockOpen = true',0|ai0:>2.2,1
 'CANCEL'|close_door|'NONE',0|'NONE',0|'NONE',0

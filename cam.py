@@ -20,11 +20,14 @@ height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 print(width, height)
 start = time.time()
 
-#GPIO.output(6, GPIO.LOW)
-#GPIO.output(26, GPIO.HIGH)
+GPIO.setup(17, GPIO.OUT)
+GPIO.setup(18, GPIO.OUT)
+
+#GPIO.output(17, GPIO.LOW)
+#GPIO.output(18, GPIO.HIGH)
 #sleep(5)
-#GPIO.output(6, GPIO.LOW)
-#GPIO.output(26, GPIO.LOW)
+GPIO.output(17, GPIO.HIGH)
+GPIO.output(18, GPIO.HIGH)
 while True:
 
     if((time.time() - start) > 10000):
@@ -51,7 +54,7 @@ while True:
 #         cap = cv2.VideoCapture(0)
         #GPIO.output(4, GPIO.LOW)
 
-    current_dimensions = [275,310,200,350]
+    current_dimensions = [250,300,200,350]
     reading = ''
     ret, frame = cap.read()# Capture frame-by-frame
     #print(ret)
@@ -79,7 +82,7 @@ while True:
                 reading += (text)
                 frame = cv2.rectangle(frame, (x + current_dimensions[2], y + current_dimensions[0]), (x + w + current_dimensions[2], y + h + current_dimensions[0]), (0, 255, 0), 2)
                 frame = cv2.putText(frame, text, (x + current_dimensions[2], y - 10 + current_dimensions[0]), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 2)
-    print(reading)
+    #print(reading)
     #Display the resulting frame
     cv2.startWindowThread()
     cv2.namedWindow("frame")

@@ -1,4 +1,3 @@
-#port 4 22 6 26
 import cv2
 import sys
 import os
@@ -9,21 +8,11 @@ from pytesseract import Output
 import time
 from time import sleep
 import RTk.GPIO as GPIO
-from pydrive.drive import GoogleDrive
-from pydrive.auth import GoogleAuth
-import os
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
 import paramiko
 import nidaqmx
 from nidaqmx.constants import TerminalConfiguration
 import threading
 GPIO.setwarnings(False)
-
-
-# Initialize starting time
-start = time.time()
-time_name = str(time.strftime("%Y%m%d-%H-%M-%S"))
 
 # Vending server information
 ssh_command = "tail -n 200 /data2/log/yitunnel-all.log"
@@ -34,38 +23,6 @@ port = 45673
 client = paramiko.client.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 client.connect(host, username=username, password=password, port = port)
-
-# Setting up new folder to store Error log and videos
-inp = input('Save error log and videos to drive?(y/n): ')
-drive_on = False
-if(inp == 'y'):
-    drive_on = True
-    folder_path = os.path.join("D:/ErrorLog/", time_name)
-    os.mkdir(folder_path)
-
-# Read instruction and image crop files
-commands = []
-crops = []
-with open('instruct.txt', 'r') as f:
-    lines = f.readlines()
-    for line in lines:
-        if(line[-1] == '\n'):
-            line = line[:-1]
-        words = line.split('|')
-        temp = []
-        for w in words:        
-            coms = w.split(',')
-            temp.append(coms)
-        commands.append(temp)
-with open('crops.txt', 'r') as f:
-    lines = f.readlines()
-    for line in lines:
-        positions.append(line.split(','))
-
-# Wipe error log text file
-log = open("error_log.txt", "w")
-log.write("TEST STARTED AT: [" + time_name + ']')
-log.close()
 
 # Start camera
 cap = cv2.VideoCapture(0)
@@ -86,6 +43,9 @@ GPIO.output(18, GPIO.HIGH)
 
 # Global variables and arrays
 quitting = False
+trial_amount = ''
+commands = []
+crops = []
 successes = 0
 trial = 0
 last_error = 0
@@ -98,27 +58,49 @@ ssh_correct = False
 ocr_correct = False
 succ_rate = 0
 current_key = ''
-current_dimensions = [1,1,1,1]
+current_dimensions = [0,int(cap.get(4)),0,int(cap.get(4))]
 current_reading = ''
+
+
+# Read instruction and image crop files
+def parse_instruct_file(path = 'instruct.txt'):
+    global crops,commands
+    if(path == ''):
+        path = 'instruct.txt'
+    with open(path, 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            if(line[-1] == '\n'):
+                line = line[:-1]
+            words = line.split('|')
+            temp = []
+            for w in words:        
+                coms = w.split(',')
+                temp.append(coms)
+            commands.append(temp)
+    with open('crops.txt', 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            crops.append(line.split(','))
+
 
 # Function for reading words on current screen and drawing it onto frame
 def scan():
-    global quitting,current_key,current_dimensions,frame_log,current_reading, cap
-    # Start camera
-
+    global quitting,current_key,current_dimensions,frame_log,current_reading,cap
     while(True):
         # Quit program if 'x' key is pressed or quitting varible true
         if(quitting == True):
-            return True
+            break
         if(keyboard.is_pressed('x')):
             print('quit from scan')
             quitting = True
+            cap.release()
+            cv2.destroyAllWindows()
             quit_run()
 
         ret, frame = cap.read() # Capture frame-by-frame
         reading = ""
-        
-        # Determine what portion of screen to read
+        # Crop frame
         cropFrame = frame[current_dimensions[0]:current_dimensions[1],current_dimensions[2]:current_dimensions[3]]
         gray = cv2.cvtColor(cropFrame, cv2.COLOR_BGR2GRAY) # convert to grayscale
         ret, bw = cv2.threshold(gray, 150,255, cv2.THRESH_BINARY) # convert text to black and everything else white
@@ -132,7 +114,7 @@ def scan():
         frame = cv2.putText(frame, ('SEARCHING FOR: "' + current_key + '"'), (10,20), cv2.FONT_HERSHEY_PLAIN, 1.2,(0, 0, 255), 2)
         frame = cv2.rectangle(frame, (current_dimensions[2], current_dimensions[0]), (current_dimensions[3], current_dimensions[1]), (255, 255, 255), 2)
         for i in range(n_boxes):
-            if int(float(data['conf'][i])) > 50:
+            if int(float(data['conf'][i])) > 60:
                 (text, x, y, w, h) = (data['text'][i], data['left'][i], data['top'][i], data['width'][i], data['height'][i])
                 if text and text.strip() != "":
                     reading += (text)
@@ -147,13 +129,9 @@ def scan():
         cv2.imshow("frame", frame)
         cv2.waitKey(1)
         sleep(.1)
-    return True
 
-def scan_timed(sec):
-    start = time.time()
-    while((time.time()-start) < sec):
-        reading,frame = scan()
-        print('reading: ' + reading)
+    cap.release()
+    cv2.destroyAllWindows()
     return True
 
 # Function for tapping screen
@@ -240,32 +218,32 @@ if(read_daq(3,'ai0',2.2,'>')):
     GPIO.output(DOOR_A, GPIO.HIGH)
     GPIO.output(DOOR_B, GPIO.HIGH)
 
-# Function for when program is terminated
+# Function for terminating program
 def quit_run():
-    global trial,succ_rate,cap
+    global trial,succ_rate,cap,trial_amount,quitting
+    quitting = True
     print('------------------------------------------------------------------------------')
     print('TERMINATING TESTING...')
 
     with open("error_log.txt", "a") as log:
         log.write('\n-------------------------------------------------------------------------------')
-        log.write('\nTEST TERMINATED AT TRIAL ' + str(trial) + ': [' + str(time.strftime("%Y%m%d-%H:%M:%S")) + ']')
+        log.write('\nTEST TERMINATED AT TRIAL ' + str(trial) + '/' + trial_amount + ': [' + str(time.strftime("%Y/%m/%d-%H:%M:%S")) + ']')
         log.write('\nSUCCESS RATE: ' + str(succ_rate) + '%' )
 
     global drive_on
     if(drive_on):
         shutil.move('error_log.txt', folder_path)
-    cap.release()
-    cv2.destroyAllWindows()
+    
     client.close()
     exit()
 
-# Function for writing error to log file and uploading picture to Drive
+# Function for writing error to log file
 def write_error(msg, ocr_log = [], daq_log = [], ssh_log = '', frame = []):
-    global folder_id, commands, trial
-    err_time = str(time.strftime("%Y%m%d-%H:%M:%S"))
+    global folder_id, commands, trial, trial_amount
+    err_time = str(time.strftime("%Y/%m/%d-%H:%M:%S"))
     log = open("error_log.txt", "a", encoding="utf-8")
     log.write('\n\n-------------------------------------------------------------------------------')
-    log.write('\nERROR ON TRIAL ' + str(trial))
+    log.write('\nERROR ON TRIAL ' + str(trial) + '/' + trial_amount)
     log.write('\nTIMESTAMP: [' + err_time + ']\n')
     log.write(msg)
     log.write('\n\nOCR READINGS:')
@@ -275,29 +253,34 @@ def write_error(msg, ocr_log = [], daq_log = [], ssh_log = '', frame = []):
 
     if(daq_log):
         log.write('\n\nDAQ READINGS:')
-    for line in daq_log:
-        log.write('\n   READING: "' + str(line) + '"')
-
+        for line in daq_log:
+            log.write('\n   READING: "' + str(line) + '"')
     log.close()
 
 
 # Function for parsing instructions and assigning correct values to all parameters
-def assign(command, p):
+def assign(command, crop):
     global current_dimensions,current_key
     current_key = command[0][0][1:-1]
     action = command[1][0]
+    ocr_flag = int(command[2][1])
+    ocr_key = command[2][0][1:-1]
+    ssh_flag = int(command[3][1])
+    ssh_key = command[3][0][1:-1]
+    daq_flag = int(command[4][1])
+    daq_channel = command[4][0]
+    daq_compare = command[4][0]
+    daq_thresh = command[4][0]
+    if(command[4][0] != "'NONE'"):
+        daq_channel = command[4][0].split(':')[0]
+        daq_compare = command[4][0].split(':')[1][0]
+        daq_thresh = command[4][0].split(':')[1][1:]
 
-
-    ocr = command[2]
-    ssh = command[3]
-    window_y1, window_y2 =  p[0].split(':')
-    window_x1, window_x2 =  p[1].split(':')
+    window_y1, window_y2 =  crop[0].split(':')
+    window_x1, window_x2 =  crop[1].split(':')
     current_dimensions = [int(window_y1), int(window_y2), int(window_x1), int(window_x2)]
-    
-    daq = command[4]
-    
-    return action,ocr,ssh,daq
 
+    return action,ocr_flag,ocr_key,ssh_flag,ssh_key,daq_flag,daq_channel,daq_compare,daq_thresh
 
 
 def do_action(action, ocr_flag, ocr_key, sec):
@@ -314,17 +297,15 @@ def do_action(action, ocr_flag, ocr_key, sec):
     
     # If OCR flag is 1 then check for confirmation key on screen after action is done
     if(ocr_flag == 1):
-        print('here')
         ocr_log = []
         ocr_correct = False
         start = time.time()
 
         while((time.time()-start) < sec):
-            print(quitting)
             if(quitting == True):
                 exit()
             if(keyboard.is_pressed('x')):
-                quitting = True
+                #quitting = True
                 quit_run()
 
             ocr_log.append(current_reading)
@@ -344,29 +325,16 @@ def do_action(action, ocr_flag, ocr_key, sec):
 def process_command(command,crop):
     global quitting,trial,ocr_correct,ssh_correct,daq_correct,ocr_log,daq_log,ssh_log,current_reading,current_dimensions
 
-    action,ocr,ssh_log,daq = assign(command,p)
-
-    ocr_flag = int(ocr[1])
-    ocr_key = ocr[0][1:-1]
-    ssh_flag = int(ssh_log[1])
-    ssh_key = ssh_log[0][1:-1]
-    daq_flag = int(daq[1])
-    daq_channel = daq[0]
-    daq_compare = daq[0]
-    daq_thresh = daq[0]
-    if(daq[0] != "'NONE'"):
-        #print(daq[0].split(':'))
-        daq_channel = daq[0].split(':')[0]
-        daq_compare = daq[0].split(':')[1][0]
-        daq_thresh = daq[0].split(':')[1][1:]
+    action,ocr_flag,ocr_key,ssh_flag,ssh_key,daq_flag,daq_channel,daq_compare,daq_thresh = assign(command,crop)
 
     starttime = time.time()
     ocr_log =[]
     frame = 0
     
-    # Look for keyword to start command
+    # Look for ocr keyword to start command
     while(True):
-        # Quit program if 'x' key is pressed or quiting variable true
+
+        # Quit program if quitting variable true
         if(quitting == True):
             exit()
 
@@ -379,11 +347,9 @@ def process_command(command,crop):
             break
         
         # Skip to next screen and send error report if ocr key isn't detected within set time
-        if((time.time()-starttime) > 10):
-            msg = 'ERROR: TOOK TOO LONG TO FIND KEYWORD "' + current_key + '" TO START COMMAND'
-            print('ERROR: TOOK TOO LONG TO FIND KEYWORD "' + current_key + '" TO START COMMAND. SKIPPING TO NEXT COMMAND')
-            if(action == 'close_door'):
-                close_door(4)
+        if((time.time()-starttime) > 18):
+            msg = 'ERROR: TOOK TOO LONG TO FIND KEYWORD "' + current_key + '" TO START COMMAND, SKIPPING TO NEXT COMMAND'
+            print(msg)
             global last_error
             if(trial != last_error):
                 write_error(msg, ocr_log = ocr_log)
@@ -391,16 +357,18 @@ def process_command(command,crop):
             return False
         sleep(.1)
     
-    # Attemp to do command
-    tries = 0
+    # Attemp to do command after ocr key was found
+    attempt = 0
     while(True):
         if(quitting == True):
             exit()
-        tries += 1
+        attempt += 1
+        print('ATTEMPT ' + str(attempt) + ':')
+
+        # Start seperate threads for action, reading daq, and reading ssh so they run concurrently
         t1 = threading.Thread(target=do_action, args=(action,ocr_flag,ocr_key,4))
         t2 = threading.Thread(target=read_daq, args=(4,daq_channel,daq_thresh,daq_compare))
         t3 = threading.Thread(target=read_ssh, args=(ssh_key,))
-
         t1.start()
         t2.start()
         t3.start()
@@ -419,8 +387,8 @@ def process_command(command,crop):
             if(ocr_flag == 1):
                 ocr_pass = False
         if(daq_correct == False):
-            print("DAQ ERROR: DID NOT PASS THRESHHOLD: " + daq[0])
-            msg += ('ERROR: DAQ DID NOT REACH DESIRED THRESHHOLD: ' + daq[0] + '\n')
+            print("DAQ ERROR: DID NOT PASS THRESHHOLD: " + daq_channel + ':' + daq_compare + daq_thresh)
+            msg += ('ERROR: DAQ DID NOT REACH DESIRED THRESHHOLD: ' + daq_channel + ':' + daq_compare + daq_thresh + '\n')
             if(daq_flag == 1):
                 daq_pass = False
         if(ssh_correct == False):
@@ -428,13 +396,13 @@ def process_command(command,crop):
             msg += ('ERROR: FAILED TO FIND SSH KEY: "' + ssh_key + '"\n')
             if(ssh_flag == 1):
                 ssh_pass = False
-        msg += ('[ATTEMPT ' + str(tries) + ']\n')
+        msg += ('[ATTEMPT ' + str(attempt) + ']\n')
 
         if(ocr_pass and daq_pass and ssh_pass):
             return True
         else:
             write_error(msg = msg, ocr_log = ocr_log, daq_log = daq_log)
-            if(tries == 2):
+            if(attempt == 2):
                 print('COMMAND FAILED TWICE. SKIPPING TO NEXT SCREEN')
                 return False 
             else:
@@ -442,23 +410,21 @@ def process_command(command,crop):
        
 
 ##------------------ MAIN LOOP --------------------
-def main():
-    global trial,frame_log,commands,positions,successes,folder_path,succ_rate,current_key
-    while(True):
+def run(trial_amount):
+    global trial,frame_log,commands,crops,successes,folder_path,succ_rate,current_key,start
+    while(trial < int(trial_amount)):
         trial += 1
         correct = 0
         frame_log = []
         print('-----------------------------------')
-        print('Trial ' + str(trial) + ':')
+        print('Trial ' + str(trial) + '/' + trial_amount + ':')
         print('-----------------------------------')
         
         for i in range(len(commands)):
             command = commands[i]
             current_key = command[0][0]
-            crop = positions[i]
-            print('ON SCREEN ' + str(commands.index(command) + 1))
-            print('SCANNING FOR: ' + command[0][0]) 
-            
+            crop = crops[i]
+            print('SCANNING FOR: ' + command[0][0] + ' (SCREEN ' + str(commands.index(command) + 1) + ')') 
             if(process_command(command,crop) == True):
                 correct += 1
         
@@ -477,16 +443,45 @@ def main():
             res.release()
 
         succ_rate = (successes/trial)*100
-        print('TRIAL ' + str(trial) + ' COMPLETE: ' + suc)
+        print('TRIAL ' + str(trial) + '/' + trial_amount + ' COMPLETE: ' + suc)
         print('TIME ELAPSED: ' + str(time.time()-start))
         print('SUCCESS RATE: ' + str(succ_rate) + '%')
 
-# When trials complete, close everything
 
-t1 = threading.Thread(target=main)
-t2 = threading.Thread(target=scan)
+    quit_run()
+    #return True
 
-t1.start()
-t2.start()
-t1.join()
-t2.join()
+
+def main():
+    global drive_on,folder_path,start,trial_amount
+    path = input("Input instruction file path: ")
+    parse_instruct_file(path)
+
+    # User chooses wether to save log and error videos to drive 
+    save = input('Save error log and videos to drive?(y/n): ')
+    trial_amount = input('Input how many trials to run: ')
+
+    # Initialize starting time
+    start = time.time()
+    time_name = str(time.strftime("%Y_%m_%d-%H-%M-%S"))
+    drive_on = False
+    if(save == 'y'):
+        drive_on = True
+        folder_path = os.path.join("D:/ErrorLog/", time_name)
+        os.mkdir(folder_path)
+
+    # Wipe error log text file
+    log = open("error_log.txt", "w")
+    log.write("TEST STARTED AT: [" + time_name + ']')
+    log.close()
+
+    t1 = threading.Thread(target=run, args = (trial_amount,))
+    t2 = threading.Thread(target=scan)
+
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+if __name__ == "__main__":
+    main()
