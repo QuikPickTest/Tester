@@ -27,7 +27,7 @@ start = time.time()
 #GPIO.output(26, GPIO.LOW)
 while True:
 
-    if((time.time() - start) > 1000):
+    if((time.time() - start) > 10000):
         cap.release()
         GPIO.output(4, GPIO.HIGH)
         sleep(.2)
@@ -51,35 +51,35 @@ while True:
 #         cap = cv2.VideoCapture(0)
         #GPIO.output(4, GPIO.LOW)
 
+    current_dimensions = [275,310,200,350]
+    reading = ''
     ret, frame = cap.read()# Capture frame-by-frame
     #print(ret)
     #frame = cv2.resize(frame, (350, 250), fx=0, fy=0, interpolation = cv2.INTER_AREA)
-    frame = frame[310:350,200:350]
-    
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    cropFrame = frame[current_dimensions[0]:current_dimensions[1],current_dimensions[2]:current_dimensions[3]]
+
+    gray = cv2.cvtColor(cropFrame, cv2.COLOR_BGR2GRAY)
     #cv2.imshow('gray', gray)
     ret, bw = cv2.threshold(gray, 140,255, cv2.THRESH_BINARY)
     cv2.startWindowThread()
     cv2.namedWindow("bw")
     cv2.moveWindow("bw", 100, 50)
     cv2.imshow("bw", bw)
-    d = pytesseract.image_to_data(bw, lang = 'eng', output_type=Output.DICT)
+    data = pytesseract.image_to_data(bw, lang = 'eng', output_type=Output.DICT)
     
     #laptime = round((time.time() - lasttime), 2)
     #print("time: " + str(laptime))
-    n_boxes = len(d['text'])
+    n_boxes = len(data['text'])
     
-    
+    frame = cv2.rectangle(frame, (current_dimensions[2], current_dimensions[0]), (current_dimensions[3], current_dimensions[1]), (255, 255, 255), 2)
     for i in range(n_boxes):
-        if int(float(d['conf'][i])) > 50:
-            (text, x, y, w, h) = (d['text'][i], d['left'][i], d['top'][i], d['width'][i], d['height'][i])
-            # don't show empty text
+        if int(float(data['conf'][i])) > 50:
+            (text, x, y, w, h) = (data['text'][i], data['left'][i], data['top'][i], data['width'][i], data['height'][i])
             if text and text.strip() != "":
-                print(text)
-                #print(str(x), str(y), str(w), str(h))
-                frame = cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                frame = cv2.putText(frame, text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
-    
+                reading += (text)
+                frame = cv2.rectangle(frame, (x + current_dimensions[2], y + current_dimensions[0]), (x + w + current_dimensions[2], y + h + current_dimensions[0]), (0, 255, 0), 2)
+                frame = cv2.putText(frame, text, (x + current_dimensions[2], y - 10 + current_dimensions[0]), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 2)
+    print(reading)
     #Display the resulting frame
     cv2.startWindowThread()
     cv2.namedWindow("frame")
