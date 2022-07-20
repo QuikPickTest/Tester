@@ -3,4 +3,4 @@
 'COOLER'|open_door|'NONE',0|'SerialShop.lockOpen = true',0|ai0:>2.2,1
 'CANCEL'|close_door|'NONE',0|'NONE',0|'NONE',0
 'DONE'|confirm|'NONE',0|'NONE',0|'NONE',0
-'NEXT'|confirm|'NONE',0|'Order and Door is Closed!',0|ai0:<1.8,1
+'NEXT'|confirm|'NONE',0|'Order and Door is Closed!',0|ai0:<2,0

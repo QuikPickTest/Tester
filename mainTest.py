@@ -14,15 +14,17 @@ from nidaqmx.constants import TerminalConfiguration
 import threading
 GPIO.setwarnings(False)
 
-# Vending server information
-ssh_command = "tail -n 200 /data2/log/yitunnel-all.log"
-host = "192.168.2.100"
-username = "sandstar"
-password = "Xe08v0Zy"
-port = 45673
-client = paramiko.client.SSHClient()
-client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-client.connect(host, username=username, password=password, port = port)
+# Function to start vending server
+def start_ssh_server():
+    global client,ssh_command
+    ssh_command = "tail -n 200 /data2/log/yitunnel-all.log"
+    host = "192.168.2.100"
+    username = "sandstar"
+    password = "Xe08v0Zy"
+    port = 45673
+    client = paramiko.client.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(host, username=username, password=password, port = port)
 
 # Start camera
 cap = cv2.VideoCapture(0)
@@ -31,15 +33,18 @@ cap.set(cv2.CAP_PROP_FPS, 30)
 
 # Initialize Relays
 TAP = 3
+COOLER = 4
 DOOR_A = 17
 DOOR_B = 18
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(TAP, GPIO.OUT)
+GPIO.setup(COOLER, GPIO.OUT)
 GPIO.setup(DOOR_A, GPIO.OUT)
 GPIO.setup(DOOR_B, GPIO.OUT)
-GPIO.output(3, GPIO.HIGH)
-GPIO.output(17, GPIO.HIGH)
-GPIO.output(18, GPIO.HIGH)
+GPIO.output(TAP, GPIO.HIGH)
+GPIO.output(COOLER, GPIO.HIGH)
+GPIO.output(DOOR_A, GPIO.HIGH)
+GPIO.output(DOOR_B, GPIO.HIGH)
 
 # Global variables and arrays
 quitting = False
@@ -128,7 +133,7 @@ def scan():
         cv2.namedWindow("frame")
         cv2.imshow("frame", frame)
         cv2.waitKey(1)
-        sleep(.1)
+        sleep(.5)
 
     cap.release()
     cv2.destroyAllWindows()
@@ -161,6 +166,26 @@ def close_door(sec = 4):
     GPIO.output(DOOR_A, GPIO.HIGH)
     GPIO.output(DOOR_B, GPIO.HIGH)
     return True
+
+# Function for turning on and off the cooler 
+def restart_cooler(ocr_key):
+    global current_reading,current_dimensions,current_key
+    current_key = 'TAP'
+    print('REBOOTING COOLER...')
+    log = open("error_log.txt", "a")
+    log.write('TRIAL FAILED 4 TIMES IN A ROW. RESTARTING COOLER')
+    log.close()
+    GPIO.output(COOLER, GPIO.LOW)
+    sleep(5)
+    GPIO.output(COOLER, GPIO.HIGH)
+    start = time.time()
+    current_dimensions = [300,450,120,400]
+    while((time.time()-start) < 100):
+        if(ocr_key in current_reading):
+            print("OCR KEY FOUND. COOLER REBOOTED")
+            break
+    start_ssh_server()
+        
 
 # Function to check if specified key is in the vending ssh log and returns log
 def read_ssh(key):
@@ -210,7 +235,7 @@ def read_daq(sec, channel, thresh, comparator):
     return False
 
 # Check daq to see if door is closed and close it if its not
-if(read_daq(3,'ai0',2.2,'>')):
+if(read_daq(.5,'ai0',2.2,'>')):
     print('DOOR OPEN BEFORE TESTING STARTED: CLOSING DOOR...')
     GPIO.output(DOOR_A, GPIO.HIGH)
     GPIO.output(DOOR_B, GPIO.LOW)
@@ -233,23 +258,25 @@ def quit_run():
     global drive_on
     if(drive_on):
         shutil.move('error_log.txt', folder_path)
-    
+    log.close()
     client.close()
     exit()
 
 # Function for writing error to log file
 def write_error(msg, ocr_log = [], daq_log = [], ssh_log = '', frame = []):
-    global folder_id, commands, trial, trial_amount
+    global folder_id, trial, trial_amount
     err_time = str(time.strftime("%Y/%m/%d-%H:%M:%S"))
     log = open("error_log.txt", "a", encoding="utf-8")
     log.write('\n\n-------------------------------------------------------------------------------')
     log.write('\nERROR ON TRIAL ' + str(trial) + '/' + trial_amount)
     log.write('\nTIMESTAMP: [' + err_time + ']\n')
     log.write(msg)
-    log.write('\n\nOCR READINGS:')
 
-    for line in ocr_log:
-        log.write('\n   READING: "' + line + '"')
+    
+    if(ocr_log):
+        log.write('\n\nOCR READINGS:')
+        for line in ocr_log:
+            log.write('\n   READING: "' + line + '"')
 
     if(daq_log):
         log.write('\n\nDAQ READINGS:')
@@ -309,7 +336,7 @@ def do_action(action, ocr_flag, ocr_key, sec):
                 quit_run()
 
             ocr_log.append(current_reading)
-            current_dimensions = [220,350,120,400]
+            current_dimensions = [210,350,120,400]
             current_key = ocr_key
             if(ocr_key in current_reading):
                 print('OCR CONFIRMATION KEY "' + ocr_key + '" FOUND')
@@ -412,6 +439,7 @@ def process_command(command,crop):
 ##------------------ MAIN LOOP --------------------
 def run(trial_amount):
     global trial,frame_log,commands,crops,successes,folder_path,succ_rate,current_key,start
+    repeat_fails = 0
     while(trial < int(trial_amount)):
         trial += 1
         correct = 0
@@ -433,23 +461,33 @@ def run(trial_amount):
         if(correct == len(commands)):
             successes += 1
             suc = 'SUCCESSFUL'
+            repeat_fails = 0
         
-        # If trail was a fail then upload full video of trial
-        elif(drive_on):
-            vid_path = os.path.join(folder_path,('Trial_' + str(trial) + '.avi'))
-            res = cv2.VideoWriter(vid_path, cv2.VideoWriter_fourcc(*'MJPG'), 8, (640,480))
-            for fr in frame_log:
-                res.write(fr)
-            res.release()
-
+        # If trial was a fail then upload full video of trial
+        else:
+            if(drive_on):
+                vid_path = os.path.join(folder_path,('Trial_' + str(trial) + '.avi'))
+                res = cv2.VideoWriter(vid_path, cv2.VideoWriter_fourcc(*'MJPG'), 8, (640,480))
+                for fr in frame_log:
+                    res.write(fr)
+                res.release()
+            repeat_fails += 1
+        
         succ_rate = (successes/trial)*100
         print('TRIAL ' + str(trial) + '/' + trial_amount + ' COMPLETE: ' + suc)
         print('TIME ELAPSED: ' + str(time.time()-start))
         print('SUCCESS RATE: ' + str(succ_rate) + '%')
 
+        # If trials fail 4 times in a row then restart cooler
+        if(repeat_fails == 4):
+            restart_cooler(ocr_key = 'TAP')
+        if(repeat_fails == 6):
+            msg = 'FAILED 2 TIMES AFTER REBOOT. MANUALLY TERMINATING...'
+            print(msg)
+            write_error(msg = msg)
+            break
 
     quit_run()
-    #return True
 
 
 def main():
@@ -472,12 +510,15 @@ def main():
 
     # Wipe error log text file
     log = open("error_log.txt", "w")
-    log.write("TEST STARTED AT: [" + time_name + ']')
+    log.write("TEST STARTED AT: [" + str(time.strftime("%Y/%m/%d-%H:%M:%S")) + ']')
     log.close()
 
+    # Start vending server
+    start_ssh_server()
+
+    # Run program and text detecter concurrently
     t1 = threading.Thread(target=run, args = (trial_amount,))
     t2 = threading.Thread(target=scan)
-
     t1.start()
     t2.start()
     t1.join()
