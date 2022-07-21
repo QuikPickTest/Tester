@@ -49,6 +49,9 @@ GPIO.output(DOOR_B, GPIO.HIGH)
 # Global variables and arrays
 quitting = False
 trial_amount = ''
+drive_on = False
+ssh_on = False
+daq_on = False
 commands = []
 crops = []
 successes = 0
@@ -169,7 +172,7 @@ def close_door(sec = 4):
 
 # Function for turning on and off the cooler 
 def restart_cooler(ocr_key):
-    global current_reading,current_dimensions,current_key
+    global current_reading,current_dimensions,current_key,ssh_on
     current_key = 'TAP'
     print('REBOOTING COOLER...')
     log = open("error_log.txt", "a")
@@ -184,7 +187,8 @@ def restart_cooler(ocr_key):
         if(ocr_key in current_reading):
             print("OCR KEY FOUND. COOLER REBOOTED")
             break
-    start_ssh_server()
+    if(ssh_on):
+        start_ssh_server()
         
 
 # Function to check if specified key is in the vending ssh log and returns log
@@ -235,7 +239,7 @@ def read_daq(sec, channel, thresh, comparator):
     return False
 
 # Check daq to see if door is closed and close it if its not
-if(read_daq(.5,'ai0',2.2,'>')):
+if(drive_on and read_daq(.5,'ai0',2.2,'>')):
     print('DOOR OPEN BEFORE TESTING STARTED: CLOSING DOOR...')
     GPIO.output(DOOR_A, GPIO.HIGH)
     GPIO.output(DOOR_B, GPIO.LOW)
@@ -350,7 +354,7 @@ def do_action(action, ocr_flag, ocr_key, sec):
 
 # Function to run trial
 def process_command(command,crop):
-    global quitting,trial,ocr_correct,ssh_correct,daq_correct,ocr_log,daq_log,ssh_log,current_reading,current_dimensions
+    global quitting,trial,ocr_correct,ssh_correct,daq_correct,ocr_log,daq_log,ssh_log,current_reading,current_dimensions,ssh_on,daq_on
 
     action,ocr_flag,ocr_key,ssh_flag,ssh_key,daq_flag,daq_channel,daq_compare,daq_thresh = assign(command,crop)
 
@@ -394,14 +398,15 @@ def process_command(command,crop):
 
         # Start seperate threads for action, reading daq, and reading ssh so they run concurrently
         t1 = threading.Thread(target=do_action, args=(action,ocr_flag,ocr_key,4))
-        t2 = threading.Thread(target=read_daq, args=(4,daq_channel,daq_thresh,daq_compare))
-        t3 = threading.Thread(target=read_ssh, args=(ssh_key,))
-        t1.start()
-        t2.start()
-        t3.start()
-        t1.join()
-        t2.join()
-        t3.join()
+
+        if(ssh_on):
+            t2 = threading.Thread(target=read_daq, args=(4,daq_channel,daq_thresh,daq_compare))
+            t2.start()
+            t2.join()
+        if(daq_on):
+            t3 = threading.Thread(target=read_ssh, args=(ssh_key,))
+            t3.start
+            t3.join()
 
         ocr_pass = True
         daq_pass = True
@@ -491,30 +496,37 @@ def run(trial_amount):
 
 
 def main():
-    global drive_on,folder_path,start,trial_amount
+    global drive_on,ssh_on,daq_onfolder_path,start,trial_amount
     path = input("Input instruction file path: ")
     parse_instruct_file(path)
 
     # User chooses wether to save log and error videos to drive 
-    save = input('Save error log and videos to drive?(y/n): ')
+    save_inp = input('Save error log and videos to drive?(y/n): ')
+    ssh_inp = input('Read vending log?(y/n): ')
+    daq_inp = input('Read DAQ?(y/n): ')
     trial_amount = input('Input how many trials to run: ')
+
+    if(ssh_inp == 'y'):
+        ssh_on = True
+        start_ssh_server()
+
+    if(daq_inp == 'y'):
+        daq_on = True
 
     # Initialize starting time
     start = time.time()
     time_name = str(time.strftime("%Y_%m_%d-%H-%M-%S"))
-    drive_on = False
-    if(save == 'y'):
+    if(save_inp == 'y'):
         drive_on = True
         folder_path = os.path.join("D:/ErrorLog/", time_name)
         os.mkdir(folder_path)
+    
 
     # Wipe error log text file
     log = open("error_log.txt", "w")
     log.write("TEST STARTED AT: [" + str(time.strftime("%Y/%m/%d-%H:%M:%S")) + ']')
     log.close()
 
-    # Start vending server
-    start_ssh_server()
 
     # Run program and text detecter concurrently
     t1 = threading.Thread(target=run, args = (trial_amount,))

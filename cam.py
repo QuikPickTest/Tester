@@ -3,7 +3,7 @@ import pytesseract
 from pytesseract import Output
 import time
 from time import sleep
-import RTk.GPIO as GPIO
+#import RTk.GPIO as GPIO
 
 #TAP = 4
 #GPIO.setmode(GPIO.BCM)
@@ -12,37 +12,39 @@ import RTk.GPIO as GPIO
 #GPIO.setup(6, GPIO.OUT)
 #GPIO.setup(26, GPIO.OUT)
 #
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 cap.set(cv2.CAP_PROP_FPS, 60)
 width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 print(width, height)
 start = time.time()
-GPIO.setup(3, GPIO.OUT)
-GPIO.setup(4, GPIO.OUT)
-GPIO.setup(17, GPIO.OUT)
-GPIO.setup(18, GPIO.OUT)
-GPIO.output(3, GPIO.HIGH)
-GPIO.output(4, GPIO.HIGH)
-GPIO.output(17, GPIO.HIGH)
-GPIO.output(18, GPIO.HIGH)
 
-GPIO.output(17, GPIO.LOW)
-GPIO.output(18, GPIO.HIGH)
-sleep(5)
-GPIO.output(17, GPIO.HIGH)
-GPIO.output(18, GPIO.LOW)
-sleep(5)
-GPIO.output(17, GPIO.HIGH)
-GPIO.output(18, GPIO.HIGH)
+print(cap.isOpened())
+#GPIO.setup(3, GPIO.OUT)
+#GPIO.setup(4, GPIO.OUT)
+#GPIO.setup(17, GPIO.OUT)
+#GPIO.setup(18, GPIO.OUT)
+#GPIO.output(3, GPIO.HIGH)
+#GPIO.output(4, GPIO.HIGH)
+#GPIO.output(17, GPIO.HIGH)
+#GPIO.output(18, GPIO.HIGH)
+#
+#GPIO.output(17, GPIO.LOW)
+#GPIO.output(18, GPIO.HIGH)
+#sleep(5)
+#GPIO.output(17, GPIO.HIGH)
+#GPIO.output(18, GPIO.LOW)
+#sleep(5)
+#GPIO.output(17, GPIO.HIGH)
+#GPIO.output(18, GPIO.HIGH)
 while True:
 
     if((time.time() - start) > 10000):
         cap.release()
-        GPIO.output(3, GPIO.LOW)
-        sleep(.2)
-        GPIO.output(3, GPIO.HIGH)
+        #GPIO.output(3, GPIO.LOW)
+        #sleep(.2)
+        #GPIO.output(3, GPIO.HIGH)
 
 #         GPIO.output(6, GPIO.HIGH)
 #         GPIO.output(26, GPIO.LOW)
@@ -65,7 +67,7 @@ while True:
     current_dimensions = [250,300,200,350]
     reading = ''
     ret, frame = cap.read()# Capture frame-by-frame
-    #print(ret)
+    
     #frame = cv2.resize(frame, (350, 250), fx=0, fy=0, interpolation = cv2.INTER_AREA)
     cropFrame = frame[current_dimensions[0]:current_dimensions[1],current_dimensions[2]:current_dimensions[3]]
 
