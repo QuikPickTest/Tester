@@ -64,16 +64,16 @@ while True:
 #         cap = cv2.VideoCapture(0)
         #GPIO.output(4, GPIO.LOW)
 
-    current_dimensions = [250,300,200,350]
+    current_dimensions = [300,350,170,300]
     reading = ''
     ret, frame = cap.read()# Capture frame-by-frame
-    
+    print(ret)
     #frame = cv2.resize(frame, (350, 250), fx=0, fy=0, interpolation = cv2.INTER_AREA)
     cropFrame = frame[current_dimensions[0]:current_dimensions[1],current_dimensions[2]:current_dimensions[3]]
 
     gray = cv2.cvtColor(cropFrame, cv2.COLOR_BGR2GRAY)
     #cv2.imshow('gray', gray)
-    ret, bw = cv2.threshold(gray, 140,255, cv2.THRESH_BINARY)
+    ret, bw = cv2.threshold(gray, 210,255, cv2.THRESH_BINARY)
     cv2.startWindowThread()
     cv2.namedWindow("bw")
     cv2.moveWindow("bw", 100, 50)

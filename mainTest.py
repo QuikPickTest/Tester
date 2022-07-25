@@ -27,7 +27,7 @@ def start_ssh_server():
     client.connect(host, username=username, password=password, port = port)
 
 # Start camera
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 cap.set(cv2.CAP_PROP_FPS, 30)
 
@@ -36,15 +36,28 @@ TAP = 3
 COOLER = 4
 DOOR_A = 17
 DOOR_B = 18
+INSERT_A = 20
+INSERT_B = 26
+NFC_A = 22
+NFC_B = 27
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(TAP, GPIO.OUT)
 GPIO.setup(COOLER, GPIO.OUT)
 GPIO.setup(DOOR_A, GPIO.OUT)
 GPIO.setup(DOOR_B, GPIO.OUT)
+GPIO.setup(INSERT_A, GPIO.OUT)
+GPIO.setup(INSERT_B, GPIO.OUT)
+GPIO.setup(NFC_A, GPIO.OUT)
+GPIO.setup(NFC_B, GPIO.OUT)
+
 GPIO.output(TAP, GPIO.HIGH)
 GPIO.output(COOLER, GPIO.HIGH)
 GPIO.output(DOOR_A, GPIO.HIGH)
 GPIO.output(DOOR_B, GPIO.HIGH)
+GPIO.output(INSERT_A, GPIO.HIGH)
+GPIO.output(INSERT_B, GPIO.HIGH)
+GPIO.setup(NFC_A, GPIO.HIGH)
+GPIO.setup(NFC_B, GPIO.HIGH)
 
 # Global variables and arrays
 quitting = False
@@ -53,7 +66,6 @@ drive_on = False
 ssh_on = False
 daq_on = False
 commands = []
-crops = []
 successes = 0
 trial = 0
 last_error = 0
@@ -61,9 +73,9 @@ daq_log = []
 ocr_log = []
 ssh_log = []
 frame_log = []
-daq_correct = False
-ssh_correct = False
-ocr_correct = False
+daq_correct = True
+ssh_correct = True
+ocr_correct = True
 succ_rate = 0
 current_key = ''
 current_dimensions = [0,int(cap.get(4)),0,int(cap.get(4))]
@@ -72,7 +84,7 @@ current_reading = ''
 
 # Read instruction and image crop files
 def parse_instruct_file(path = 'instruct.txt'):
-    global crops,commands
+    global commands
     if(path == ''):
         path = 'instruct.txt'
     with open(path, 'r') as f:
@@ -86,11 +98,6 @@ def parse_instruct_file(path = 'instruct.txt'):
                 coms = w.split(',')
                 temp.append(coms)
             commands.append(temp)
-    with open('crops.txt', 'r') as f:
-        lines = f.readlines()
-        for line in lines:
-            crops.append(line.split(','))
-
 
 # Function for reading words on current screen and drawing it onto frame
 def scan():
@@ -109,9 +116,9 @@ def scan():
         ret, frame = cap.read() # Capture frame-by-frame
         reading = ""
         # Crop frame
-        cropFrame = frame[current_dimensions[0]:current_dimensions[1],current_dimensions[2]:current_dimensions[3]]
+        cropFrame = frame[int(current_dimensions[0]):int(current_dimensions[1]),int(current_dimensions[2]):int(current_dimensions[3])]
         gray = cv2.cvtColor(cropFrame, cv2.COLOR_BGR2GRAY) # convert to grayscale
-        ret, bw = cv2.threshold(gray, 150,255, cv2.THRESH_BINARY) # convert text to black and everything else white
+        ret, bw = cv2.threshold(gray, 210,255, cv2.THRESH_BINARY) # convert text to black and everything else white (150!!!!!!)
         #cv2.startWindowThread()
         #cv2.namedWindow("bw")
         #cv2.imshow('bw',bw)
@@ -120,16 +127,16 @@ def scan():
         n_boxes = len(data['text'])
 
         frame = cv2.putText(frame, ('SEARCHING FOR: "' + current_key + '"'), (10,20), cv2.FONT_HERSHEY_PLAIN, 1.2,(0, 0, 255), 2)
-        frame = cv2.rectangle(frame, (current_dimensions[2], current_dimensions[0]), (current_dimensions[3], current_dimensions[1]), (255, 255, 255), 2)
+        frame = cv2.rectangle(frame, (int(current_dimensions[2]), int(current_dimensions[0])), (int(current_dimensions[3]), int(current_dimensions[1])), (255, 255, 255), 2)
         for i in range(n_boxes):
             if int(float(data['conf'][i])) > 60:
                 (text, x, y, w, h) = (data['text'][i], data['left'][i], data['top'][i], data['width'][i], data['height'][i])
                 if text and text.strip() != "":
                     reading += (text)
-                    frame = cv2.rectangle(frame, (x + current_dimensions[2], y + current_dimensions[0]), (x + w + current_dimensions[2], y + h + current_dimensions[0]), (0, 255, 0), 2)
-                    frame = cv2.putText(frame, text, (x + current_dimensions[2], y - 10 + current_dimensions[0]), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 2)
+                    frame = cv2.rectangle(frame, (x + int(current_dimensions[2]), y + int(current_dimensions[0])), (x + w + int(current_dimensions[2]), y + h + int(current_dimensions[0])), (0, 255, 0), 2)
+                    frame = cv2.putText(frame, text, (x + int(current_dimensions[2]), y - 10 + int(current_dimensions[0])), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 2)
         
-        current_reading = reading
+        current_reading = reading.lower()
         frame_log.append(frame)
 
         cv2.startWindowThread()
@@ -170,6 +177,34 @@ def close_door(sec = 4):
     GPIO.output(DOOR_B, GPIO.HIGH)
     return True
 
+def insert_in():
+    print("INSERTING CARD...")
+    GPIO.output(INSERT_A, GPIO.LOW)
+    GPIO.output(INSERT_B, GPIO.HIGH)
+    sleep(2)
+    GPIO.output(INSERT_A, GPIO.HIGH)
+
+def insert_out():
+    print("RETRACTING CARD...")
+    GPIO.output(INSERT_A, GPIO.HIGH)
+    GPIO.output(INSERT_B, GPIO.LOW)
+    sleep(2)
+    GPIO.output(INSERT_B, GPIO.HIGH)
+
+def NFC_on():
+    print("PUTTING NFC ON READER...")
+    GPIO.output(NFC_A, GPIO.LOW)
+    GPIO.output(NFC_B, GPIO.HIGH)
+    sleep(2)
+    GPIO.output(NFC_A, GPIO.HIGH)
+
+def NFC_off():
+    print("TAKING NFC OFF READER...")
+    GPIO.output(NFC_A, GPIO.HIGH)
+    GPIO.output(NFC_B, GPIO.LOW)
+    sleep(2)
+    GPIO.output(NFC_B, GPIO.HIGH)
+
 # Function for turning on and off the cooler 
 def restart_cooler(ocr_key):
     global current_reading,current_dimensions,current_key,ssh_on
@@ -182,7 +217,7 @@ def restart_cooler(ocr_key):
     sleep(5)
     GPIO.output(COOLER, GPIO.HIGH)
     start = time.time()
-    current_dimensions = [300,450,120,400]
+    current_dimensions = [250,400,100,350]
     while((time.time()-start) < 100):
         if(ocr_key in current_reading):
             print("OCR KEY FOUND. COOLER REBOOTED")
@@ -249,7 +284,7 @@ if(drive_on and read_daq(.5,'ai0',2.2,'>')):
 
 # Function for terminating program
 def quit_run():
-    global trial,succ_rate,cap,trial_amount,quitting
+    global trial,succ_rate,cap,trial_amount,quitting,drive_on,ssh_on
     quitting = True
     print('------------------------------------------------------------------------------')
     print('TERMINATING TESTING...')
@@ -258,12 +293,12 @@ def quit_run():
         log.write('\n-------------------------------------------------------------------------------')
         log.write('\nTEST TERMINATED AT TRIAL ' + str(trial) + '/' + trial_amount + ': [' + str(time.strftime("%Y/%m/%d-%H:%M:%S")) + ']')
         log.write('\nSUCCESS RATE: ' + str(succ_rate) + '%' )
-
-    global drive_on
+    
     if(drive_on):
         shutil.move('error_log.txt', folder_path)
-    log.close()
-    client.close()
+    if(ssh_on):
+        client.close()
+
     exit()
 
 # Function for writing error to log file
@@ -289,43 +324,25 @@ def write_error(msg, ocr_log = [], daq_log = [], ssh_log = '', frame = []):
     log.close()
 
 
-# Function for parsing instructions and assigning correct values to all parameters
-def assign(command, crop):
-    global current_dimensions,current_key
-    current_key = command[0][0][1:-1]
-    action = command[1][0]
-    ocr_flag = int(command[2][1])
-    ocr_key = command[2][0][1:-1]
-    ssh_flag = int(command[3][1])
-    ssh_key = command[3][0][1:-1]
-    daq_flag = int(command[4][1])
-    daq_channel = command[4][0]
-    daq_compare = command[4][0]
-    daq_thresh = command[4][0]
-    if(command[4][0] != "'NONE'"):
-        daq_channel = command[4][0].split(':')[0]
-        daq_compare = command[4][0].split(':')[1][0]
-        daq_thresh = command[4][0].split(':')[1][1:]
-
-    window_y1, window_y2 =  crop[0].split(':')
-    window_x1, window_x2 =  crop[1].split(':')
-    current_dimensions = [int(window_y1), int(window_y2), int(window_x1), int(window_x2)]
-
-    return action,ocr_flag,ocr_key,ssh_flag,ssh_key,daq_flag,daq_channel,daq_compare,daq_thresh
-
-
-def do_action(action, ocr_flag, ocr_key, sec):
+def do_action(action, ocr_flag, ocr_crop, ocr_key, sec):
     global quitting,ocr_correct, ocr_log, current_reading, current_dimensions, current_key
+    
     # Handler for each type of action
     if(action == 'tap'):
         tap()
-
     elif(action == 'open_door'):
         open_door(4)
-
     elif(action == 'close_door'):
         close_door(4)
-    
+    elif(action == 'insert_in'):
+        insert_in()
+    elif(action == 'insert_out'):
+        insert_out()
+    elif(action == 'NFC_on'):
+        NFC_on()
+    elif(action == 'NFC_off'):
+        NFC_off()
+
     # If OCR flag is 1 then check for confirmation key on screen after action is done
     if(ocr_flag == 1):
         ocr_log = []
@@ -340,7 +357,7 @@ def do_action(action, ocr_flag, ocr_key, sec):
                 quit_run()
 
             ocr_log.append(current_reading)
-            current_dimensions = [210,350,120,400]
+            current_dimensions = ocr_crop
             current_key = ocr_key
             if(ocr_key in current_reading):
                 print('OCR CONFIRMATION KEY "' + ocr_key + '" FOUND')
@@ -353,16 +370,39 @@ def do_action(action, ocr_flag, ocr_key, sec):
     return True
 
 # Function to run trial
-def process_command(command,crop):
-    global quitting,trial,ocr_correct,ssh_correct,daq_correct,ocr_log,daq_log,ssh_log,current_reading,current_dimensions,ssh_on,daq_on
+def process_command(command):
+    global quitting,trial,ocr_correct,ssh_correct,daq_correct,ocr_log,daq_log,ssh_log,current_reading,current_key,current_dimensions,ssh_on,daq_on
 
-    action,ocr_flag,ocr_key,ssh_flag,ssh_key,daq_flag,daq_channel,daq_compare,daq_thresh = assign(command,crop)
+    # Assigning correct values to attributes
+    current_key = command[0][0][1:-1]
+    current_dimensions =  command[0][1][1:-1].split(':')
+    action = command[1][0]
+    ocr_key = command[2][0][1:-1]
+    ocr_crop = []
+    if(ocr_key != "'NONE'"):
+        ocr_crop = command[2][1][1:-1].split(':')
+    ocr_flag = int(command[2][2])
+    ssh_key = command[3][0][1:-1]    
+    ssh_flag = int(command[3][1])
+    daq_flag = int(command[4][1])
+    daq_channel = command[4][0]
+    daq_compare = command[4][0]
+    daq_thresh = command[4][0]
+    if(command[4][0] != "'NONE'"):
+        daq_channel = command[4][0].split(':')[0]
+        daq_compare = command[4][0].split(':')[1][0]
+        daq_thresh = command[4][0].split(':')[1][1:]
+    
+    #print(crop)
+    #current_dimensions = [int(crop[0]), int(crop[1]), int(crop[2]), int(crop[3])]
+
+    #action,ocr_flag,ocr_key,ssh_flag,ssh_key,daq_flag,daq_channel,daq_compare,daq_thresh = assign(command,crop)
 
     starttime = time.time()
     ocr_log =[]
     frame = 0
-    
-    # Look for ocr keyword to start command
+
+    # Look for OCR keyword to start command
     while(True):
 
         # Quit program if quitting variable true
@@ -378,7 +418,7 @@ def process_command(command,crop):
             break
         
         # Skip to next screen and send error report if ocr key isn't detected within set time
-        if((time.time()-starttime) > 18):
+        if((time.time()-starttime) > 10):
             msg = 'ERROR: TOOK TOO LONG TO FIND KEYWORD "' + current_key + '" TO START COMMAND, SKIPPING TO NEXT COMMAND'
             print(msg)
             global last_error
@@ -397,7 +437,9 @@ def process_command(command,crop):
         print('ATTEMPT ' + str(attempt) + ':')
 
         # Start seperate threads for action, reading daq, and reading ssh so they run concurrently
-        t1 = threading.Thread(target=do_action, args=(action,ocr_flag,ocr_key,4))
+        t1 = threading.Thread(target=do_action, args=(action,ocr_flag,ocr_crop,ocr_key,10))
+        t1.start()
+        t1.join()
 
         if(ssh_on):
             t2 = threading.Thread(target=read_daq, args=(4,daq_channel,daq_thresh,daq_compare))
@@ -443,7 +485,7 @@ def process_command(command,crop):
 
 ##------------------ MAIN LOOP --------------------
 def run(trial_amount):
-    global trial,frame_log,commands,crops,successes,folder_path,succ_rate,current_key,start
+    global trial,frame_log,commands,successes,folder_path,succ_rate,current_key,start
     repeat_fails = 0
     while(trial < int(trial_amount)):
         trial += 1
@@ -456,9 +498,8 @@ def run(trial_amount):
         for i in range(len(commands)):
             command = commands[i]
             current_key = command[0][0]
-            crop = crops[i]
             print('SCANNING FOR: ' + command[0][0] + ' (SCREEN ' + str(commands.index(command) + 1) + ')') 
-            if(process_command(command,crop) == True):
+            if(process_command(command) == True):
                 correct += 1
         
         # If all commands are successful count trial as success
