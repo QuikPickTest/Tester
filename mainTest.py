@@ -12,8 +12,18 @@ import paramiko
 import nidaqmx
 from nidaqmx.constants import TerminalConfiguration
 import threading
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
 GPIO.setwarnings(False)
 
+import subprocess
+
+def start_Google_drive():
+    global drive
+    gauth = GoogleAuth()
+    gauth.LocalWebserverAuth()
+    drive = GoogleDrive(gauth)
+    
 # Function to start vending server
 def start_ssh_server():
     global client,ssh_command
@@ -27,7 +37,7 @@ def start_ssh_server():
     client.connect(host, username=username, password=password, port = port)
 
 # Start camera
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 cap.set(cv2.CAP_PROP_FPS, 30)
 
@@ -61,8 +71,10 @@ GPIO.setup(NFC_B, GPIO.HIGH)
 
 # Global variables and arrays
 quitting = False
+time_name = ''
 trial_amount = ''
 drive_on = False
+drive = 0
 ssh_on = False
 daq_on = False
 commands = []
@@ -82,7 +94,7 @@ current_dimensions = [0,int(cap.get(4)),0,int(cap.get(4))]
 current_reading = ''
 
 
-# Read instruction and image crop files
+# Read instruction file
 def parse_instruct_file(path = 'instruct.txt'):
     global commands
     if(path == ''):
@@ -118,7 +130,7 @@ def scan():
         # Crop frame
         cropFrame = frame[int(current_dimensions[0]):int(current_dimensions[1]),int(current_dimensions[2]):int(current_dimensions[3])]
         gray = cv2.cvtColor(cropFrame, cv2.COLOR_BGR2GRAY) # convert to grayscale
-        ret, bw = cv2.threshold(gray, 210,255, cv2.THRESH_BINARY) # convert text to black and everything else white (150!!!!!!)
+        ret, bw = cv2.threshold(gray, 150,255, cv2.THRESH_BINARY) # convert text to black and everything else white (150!!!!!!)
         #cv2.startWindowThread()
         #cv2.namedWindow("bw")
         #cv2.imshow('bw',bw)
@@ -282,9 +294,16 @@ if(drive_on and read_daq(.5,'ai0',2.2,'>')):
     GPIO.output(DOOR_A, GPIO.HIGH)
     GPIO.output(DOOR_B, GPIO.HIGH)
 
+def change_permissions_recursive(path, mode):
+    for root, dirs, files in os.walk(path, topdown=False):
+        for dir in [os.path.join(root,d) for d in dirs]:
+            os.chmod(dir, mode)
+    for file in [os.path.join(root, f) for f in files]:
+            os.chmod(file, mode)
+
 # Function for terminating program
 def quit_run():
-    global trial,succ_rate,cap,trial_amount,quitting,drive_on,ssh_on
+    global trial,succ_rate,cap,trial_amount,quitting,drive_on,ssh_on,drive,time_name,folder_path
     quitting = True
     print('------------------------------------------------------------------------------')
     print('TERMINATING TESTING...')
@@ -294,8 +313,21 @@ def quit_run():
         log.write('\nTEST TERMINATED AT TRIAL ' + str(trial) + '/' + trial_amount + ': [' + str(time.strftime("%Y/%m/%d-%H:%M:%S")) + ']')
         log.write('\nSUCCESS RATE: ' + str(succ_rate) + '%' )
     
+    
+
     if(drive_on):
-        shutil.move('error_log.txt', folder_path)
+        shutil.move('error_log.txt', time_name)
+        
+        folder = drive.CreateFile({'title': time_name, 'mimeType': 'application/vnd.google-apps.folder'})
+        folder.Upload()
+        id = folder['id']
+
+        for filename in os.listdir(time_name):
+            f = os.path.join(time_name, filename)
+            f1 = drive.CreateFile({'title': filename, "parents": [{"id": id, "kind": "drive#childList"}]})
+            f1.SetContentFile(f)
+            f1.Upload()
+
     if(ssh_on):
         client.close()
 
@@ -378,10 +410,10 @@ def process_command(command):
     current_dimensions =  command[0][1][1:-1].split(':')
     action = command[1][0]
     ocr_key = command[2][0][1:-1]
-    ocr_crop = []
-    if(ocr_key != "'NONE'"):
-        ocr_crop = command[2][1][1:-1].split(':')
-    ocr_flag = int(command[2][2])
+    ocr_flag = int(command[2][1])
+    ocr_crop = [0,0,0,0]
+    if(ocr_key != 'NONE'):
+        ocr_crop = command[2][2][1:-1].split(':')
     ssh_key = command[3][0][1:-1]    
     ssh_flag = int(command[3][1])
     daq_flag = int(command[4][1])
@@ -418,13 +450,16 @@ def process_command(command):
             break
         
         # Skip to next screen and send error report if ocr key isn't detected within set time
-        if((time.time()-starttime) > 10):
+        if((time.time()-starttime) > 6):
             msg = 'ERROR: TOOK TOO LONG TO FIND KEYWORD "' + current_key + '" TO START COMMAND, SKIPPING TO NEXT COMMAND'
             print(msg)
+
             global last_error
             if(trial != last_error):
                 write_error(msg, ocr_log = ocr_log)
                 last_error = trial
+                if(action == 'close_door'):
+                    close_door()
             return False
         sleep(.1)
     
@@ -437,7 +472,7 @@ def process_command(command):
         print('ATTEMPT ' + str(attempt) + ':')
 
         # Start seperate threads for action, reading daq, and reading ssh so they run concurrently
-        t1 = threading.Thread(target=do_action, args=(action,ocr_flag,ocr_crop,ocr_key,10))
+        t1 = threading.Thread(target=do_action, args=(action,ocr_flag,ocr_crop,ocr_key,5))
         t1.start()
         t1.join()
 
@@ -447,7 +482,7 @@ def process_command(command):
             t2.join()
         if(daq_on):
             t3 = threading.Thread(target=read_ssh, args=(ssh_key,))
-            t3.start
+            t3.start()
             t3.join()
 
         ocr_pass = True
@@ -478,6 +513,8 @@ def process_command(command):
             write_error(msg = msg, ocr_log = ocr_log, daq_log = daq_log)
             if(attempt == 2):
                 print('COMMAND FAILED TWICE. SKIPPING TO NEXT SCREEN')
+                if(action == 'close_door'):
+                    close_door()
                 return False 
             else:
                 print('ALL FLAGGED TESTS DID NOT PASS. RETRYING COMMAND')
@@ -485,7 +522,7 @@ def process_command(command):
 
 ##------------------ MAIN LOOP --------------------
 def run(trial_amount):
-    global trial,frame_log,commands,successes,folder_path,succ_rate,current_key,start
+    global trial,frame_log,commands,successes,folder_path,succ_rate,current_key,start,time_name
     repeat_fails = 0
     while(trial < int(trial_amount)):
         trial += 1
@@ -512,7 +549,7 @@ def run(trial_amount):
         # If trial was a fail then upload full video of trial
         else:
             if(drive_on):
-                vid_path = os.path.join(folder_path,('Trial_' + str(trial) + '.avi'))
+                vid_path = os.path.join(time_name,('Trial_' + str(trial) + '.avi'))
                 res = cv2.VideoWriter(vid_path, cv2.VideoWriter_fourcc(*'MJPG'), 8, (640,480))
                 for fr in frame_log:
                     res.write(fr)
@@ -537,7 +574,7 @@ def run(trial_amount):
 
 
 def main():
-    global drive_on,ssh_on,daq_onfolder_path,start,trial_amount
+    global time_name,drive_on,ssh_on,daq_on,folder_path,start,trial_amount
     path = input("Input instruction file path: ")
     parse_instruct_file(path)
 
@@ -559,8 +596,10 @@ def main():
     time_name = str(time.strftime("%Y_%m_%d-%H-%M-%S"))
     if(save_inp == 'y'):
         drive_on = True
-        folder_path = os.path.join("D:/ErrorLog/", time_name)
-        os.mkdir(folder_path)
+        #folder_path = os.path.join("D:/ErrorLog/", time_name)
+        os.mkdir(time_name, mode = 0o777)
+        print(oct(os.stat(time_name).st_mode))
+        start_Google_drive()
     
 
     # Wipe error log text file

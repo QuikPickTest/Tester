@@ -12,13 +12,12 @@ from time import sleep
 #GPIO.setup(6, GPIO.OUT)
 #GPIO.setup(26, GPIO.OUT)
 #
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 cap.set(cv2.CAP_PROP_FPS, 60)
 width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 print(width, height)
-start = time.time()
 
 print(cap.isOpened())
 #GPIO.setup(3, GPIO.OUT)
@@ -40,35 +39,10 @@ print(cap.isOpened())
 #GPIO.output(18, GPIO.HIGH)
 while True:
 
-    if((time.time() - start) > 10000):
-        cap.release()
-        #GPIO.output(3, GPIO.LOW)
-        #sleep(.2)
-        #GPIO.output(3, GPIO.HIGH)
-
-#         GPIO.output(6, GPIO.HIGH)
-#         GPIO.output(26, GPIO.LOW)
-#         sleep(.2)
-#         GPIO.output(6, GPIO.LOW)
-#         GPIO.output(26, GPIO.LOW)
-#         sleep(.2)
-#        else:
-#             GPIO.output(4, GPIO.LOW)
-        start = time.time()
-        cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        cap.set(cv2.CAP_PROP_FPS, 60)
-#         cv2.VideoCapture(0).release()
-#         GPIO.output(4, GPIO.HIGH)
-#         sleep(.2)
-#         cap = cv2.VideoCapture(0)
-        #GPIO.output(4, GPIO.LOW)
-
     current_dimensions = [300,350,170,300]
     reading = ''
     ret, frame = cap.read()# Capture frame-by-frame
-    print(ret)
-    #frame = cv2.resize(frame, (350, 250), fx=0, fy=0, interpolation = cv2.INTER_AREA)
+
     cropFrame = frame[current_dimensions[0]:current_dimensions[1],current_dimensions[2]:current_dimensions[3]]
 
     gray = cv2.cvtColor(cropFrame, cv2.COLOR_BGR2GRAY)
@@ -78,12 +52,18 @@ while True:
     cv2.namedWindow("bw")
     cv2.moveWindow("bw", 100, 50)
     cv2.imshow("bw", bw)
+
     data = pytesseract.image_to_data(bw, lang = 'eng', output_type=Output.DICT)
-    
-    #laptime = round((time.time() - lasttime), 2)
-    #print("time: " + str(laptime))
+
     n_boxes = len(data['text'])
     
+    for y in range(0,480,50):
+        frame = cv2.line(frame, (0,y), (640,y), (0,0,255), 1)
+        frame = cv2.putText(frame, str(y), (0,y), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255,100), 1)
+    for x in range(0,640,50):
+        frame = cv2.line(frame, (x,0), (x,480), (0,0,255), 1) 
+        frame = cv2.putText(frame, str(x), (x,10), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255,100), 1)
+
     frame = cv2.rectangle(frame, (current_dimensions[2], current_dimensions[0]), (current_dimensions[3], current_dimensions[1]), (255, 255, 255), 2)
     for i in range(n_boxes):
         if int(float(data['conf'][i])) > 50:
