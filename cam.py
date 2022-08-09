@@ -39,7 +39,7 @@ print(cap.isOpened())
 #GPIO.output(18, GPIO.HIGH)
 while True:
 
-    current_dimensions = [300,350,170,300]
+    current_dimensions = [300,340,190,320]
     reading = ''
     ret, frame = cap.read()# Capture frame-by-frame
 
@@ -47,7 +47,7 @@ while True:
 
     gray = cv2.cvtColor(cropFrame, cv2.COLOR_BGR2GRAY)
     #cv2.imshow('gray', gray)
-    ret, bw = cv2.threshold(gray, 210,255, cv2.THRESH_BINARY)
+    ret, bw = cv2.threshold(gray, 150,255, cv2.THRESH_BINARY)
     cv2.startWindowThread()
     cv2.namedWindow("bw")
     cv2.moveWindow("bw", 100, 50)

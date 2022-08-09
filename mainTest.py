@@ -44,26 +44,30 @@ cap.set(cv2.CAP_PROP_FPS, 30)
 # Initialize Relays
 TAP = 3
 COOLER = 4
-DOOR_A = 17
-DOOR_B = 18
 INSERT_A = 20
 INSERT_B = 26
 NFC_A = 22
 NFC_B = 27
+STEP_POWER = 17
+DIR = 23   # Direction GPIO Pin
+STEP = 24  # Step GPIO Pin
+CW = 1     # Clockwise Rotation
+CCW = 0    # Counterclockwise Rotation
+
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(TAP, GPIO.OUT)
 GPIO.setup(COOLER, GPIO.OUT)
-GPIO.setup(DOOR_A, GPIO.OUT)
-GPIO.setup(DOOR_B, GPIO.OUT)
+GPIO.setup(STEP_POWER, GPIO.OUT)
 GPIO.setup(INSERT_A, GPIO.OUT)
 GPIO.setup(INSERT_B, GPIO.OUT)
 GPIO.setup(NFC_A, GPIO.OUT)
 GPIO.setup(NFC_B, GPIO.OUT)
+GPIO.setup(DIR, GPIO.OUT)
+GPIO.setup(STEP, GPIO.OUT)
 
 GPIO.output(TAP, GPIO.HIGH)
+#GPIO.output(STEP_POWER, GPIO.HIGH)
 GPIO.output(COOLER, GPIO.HIGH)
-GPIO.output(DOOR_A, GPIO.HIGH)
-GPIO.output(DOOR_B, GPIO.HIGH)
 GPIO.output(INSERT_A, GPIO.HIGH)
 GPIO.output(INSERT_B, GPIO.HIGH)
 GPIO.setup(NFC_A, GPIO.HIGH)
@@ -169,24 +173,40 @@ def tap():
     GPIO.output(TAP, GPIO.HIGH)
             
 # Functions for opening and closing door
-def open_door(sec = 4):
+def open_door():
+    global current_dimensions
     print("OPENING DOOR...")
+    GPIO.output(DIR, CW)
+    #current_dimensions = [310,340,200,350]
+    #current_key = 'cancel'
     start = time.time()
-    while((time.time()-start) < sec):
-        GPIO.output(DOOR_A, GPIO.LOW)
-        GPIO.output(DOOR_B, GPIO.HIGH)
-    GPIO.output(DOOR_A, GPIO.HIGH)
-    GPIO.output(DOOR_B, GPIO.HIGH)
+    while((time.time()-start) < 5):
+        GPIO.output(STEP, GPIO.HIGH)
+        sleep(.0001)
+        GPIO.output(STEP, GPIO.LOW)
+        #if('cancel' in current_reading):
+            #break
     return True
 
-def close_door(sec = 4):
+def close_door():
+    global current_dimensions,current_key, current_reading
     print("CLOSING DOOR...")
+    GPIO.output(DIR, CCW)
+    current_dimensions = [250,300,200,350]
     start = time.time()
-    while((time.time()-start) < sec):
-        GPIO.output(DOOR_A, GPIO.HIGH)
-        GPIO.output(DOOR_B, GPIO.LOW)
-    GPIO.output(DOOR_A, GPIO.HIGH)
-    GPIO.output(DOOR_B, GPIO.HIGH)
+    while((time.time()-start) < 5):
+        GPIO.output(STEP, GPIO.HIGH)
+        sleep(.0001)
+        GPIO.output(STEP, GPIO.LOW)
+        if('done' in current_reading):
+            break
+    #GPIO.output(STEP_POWER, GPIO.HIGH)
+    #start = time.time()
+    #current_key = 'done'
+    #while((time.time()-start) < 15):
+    #    if('done' in current_reading):
+    #        break
+    #GPIO.output(STEP_POWER, GPIO.LOW)
     return True
 
 def insert_in():
@@ -286,13 +306,13 @@ def read_daq(sec, channel, thresh, comparator):
     return False
 
 # Check daq to see if door is closed and close it if its not
-if(drive_on and read_daq(.5,'ai0',2.2,'>')):
-    print('DOOR OPEN BEFORE TESTING STARTED: CLOSING DOOR...')
-    GPIO.output(DOOR_A, GPIO.HIGH)
-    GPIO.output(DOOR_B, GPIO.LOW)
-    sleep(4)
-    GPIO.output(DOOR_A, GPIO.HIGH)
-    GPIO.output(DOOR_B, GPIO.HIGH)
+#if(drive_on and read_daq(.5,'ai0',2.2,'>')):
+#    print('DOOR OPEN BEFORE TESTING STARTED: CLOSING DOOR...')
+#    GPIO.output(DOOR_A, GPIO.HIGH)
+#    GPIO.output(DOOR_B, GPIO.LOW)
+#    sleep(4)
+#    GPIO.output(DOOR_A, GPIO.HIGH)
+#    GPIO.output(DOOR_B, GPIO.HIGH)
 
 def change_permissions_recursive(path, mode):
     for root, dirs, files in os.walk(path, topdown=False):
@@ -314,7 +334,6 @@ def quit_run():
         log.write('\nSUCCESS RATE: ' + str(succ_rate) + '%' )
     
     
-
     if(drive_on):
         shutil.move('error_log.txt', time_name)
         
@@ -330,7 +349,7 @@ def quit_run():
 
     if(ssh_on):
         client.close()
-
+    GPIO.output(STEP_POWER, GPIO.HIGH)
     exit()
 
 # Function for writing error to log file
@@ -363,9 +382,9 @@ def do_action(action, ocr_flag, ocr_crop, ocr_key, sec):
     if(action == 'tap'):
         tap()
     elif(action == 'open_door'):
-        open_door(4)
+        open_door()
     elif(action == 'close_door'):
-        close_door(4)
+        close_door()
     elif(action == 'insert_in'):
         insert_in()
     elif(action == 'insert_out'):
@@ -450,7 +469,7 @@ def process_command(command):
             break
         
         # Skip to next screen and send error report if ocr key isn't detected within set time
-        if((time.time()-starttime) > 6):
+        if((time.time()-starttime) > 18):
             msg = 'ERROR: TOOK TOO LONG TO FIND KEYWORD "' + current_key + '" TO START COMMAND, SKIPPING TO NEXT COMMAND'
             print(msg)
 

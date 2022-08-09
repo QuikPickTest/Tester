@@ -1,6 +1,6 @@
 'tap',[300:450:120:400]|tap|'wait',1,[210:350:120:400]|'NONE',0|'NONE',0
 'wait',[210:350:120:400]|tap|'cooler',1,[210:350:120:400]|'NONE',0|ai0:>2.2,1
-'cooler',[210:350:120:400]|open_door|'NONE',0|'SerialShop.lockOpen = true',0|ai0:>2.2,1
-'cancel',[310:340:200:350]|close_door|'NONE',0|'NONE',0|'NONE',0
+'cooler',[210:350:120:400]|open_door|'NONE',0|'SerialShop.lockOpen = true',0|ai0:>2.2,0
+'cancel',[300:340:190:320]|close_door|'NONE',0|'NONE',0|'NONE',0
 'done',[250:300:200:350]|confirm|'NONE',0|'NONE',0|'NONE',0
 'next',[210:350:120:400]|confirm|'NONE',0|'Order and Door is Closed!',0|ai0:<2,0

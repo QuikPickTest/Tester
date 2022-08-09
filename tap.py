@@ -22,14 +22,21 @@ GPIO.output(27, GPIO.HIGH)
 GPIO.output(20, GPIO.HIGH)
 GPIO.output(26, GPIO.HIGH)
 
-GPIO.output(20, GPIO.HIGH)
-GPIO.output(26, GPIO.LOW)
-sleep(3)
-GPIO.output(20, GPIO.HIGH)
-GPIO.output(26, GPIO.HIGH)
 
+#GPIO.output(20, GPIO.HIGH)
+#GPIO.output(26, GPIO.LOW)
+#sleep(3)
+#GPIO.output(20, GPIO.HIGH)
+#GPIO.output(26, GPIO.HIGH)
+#
 
-#GPIO.output(3, GPIO.LOW)
+#GPIO.output(17, GPIO.HIGH)
+#sleep(10)
+#GPIO.output(17, GPIO.HIGH)
+GPIO.output(3, GPIO.LOW)
+sleep(.2)
+GPIO.output(3, GPIO.HIGH)
+
 while(False):
     GPIO.output(20, GPIO.LOW)
     GPIO.output(26, GPIO.HIGH)
