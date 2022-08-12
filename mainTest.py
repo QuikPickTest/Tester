@@ -79,6 +79,7 @@ trial_amount = ''
 color_thresh = 150
 ocr_timeout = 18
 fail_amount = 4
+time_door_open = 5
 drive_on = False
 drive = 0
 ssh_on = False
@@ -126,10 +127,13 @@ def read_settings():
             line = line.split()
             if(line[0] == 'color_thresh'):
                 color_thresh = int(line[2])
-            if(line[0] == 'ocr_timeout'):
+            elif(line[0] == 'ocr_timeout'):
                 ocr_timeout = int(line[2])
-            if(line[0] == 'fail_amount'):
+            elif(line[0] == 'fail_amount'):
                 fail_amount = int(line[2])
+            elif(line[0] == 'time_door_open'):
+                time_door_open = int(line[2])
+
 
 # Function for reading words on current screen and drawing it onto frame
 def scan():
@@ -188,24 +192,25 @@ def tap():
     GPIO.output(TAP, GPIO.HIGH)
             
 # Function for opening door
-def open_door(sec):
+def open_door():
+    global time_door_open
     print("OPENING DOOR...")
     GPIO.output(DIR, CW)
     start = time.time()
-    while((time.time()-start) < sec):
+    while((time.time()-start) < time_door_open):
         GPIO.output(STEP, GPIO.HIGH)
         sleep(.0001)
         GPIO.output(STEP, GPIO.LOW)
     return True
 
 # Function for closing door
-def close_door(sec):
-    global current_dimensions,current_key,current_reading
+def close_door():
+    global current_dimensions,current_key,current_reading,time_door_open
     print("CLOSING DOOR...")
     GPIO.output(DIR, CCW)
     current_dimensions = [250,300,200,350]
     start = time.time()
-    while((time.time()-start) < sec):
+    while((time.time()-start) < time_door_open):
         GPIO.output(STEP, GPIO.HIGH)
         sleep(.0001)
         GPIO.output(STEP, GPIO.LOW)
