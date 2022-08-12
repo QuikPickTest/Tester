@@ -1,0 +1,3 @@
+color_thresh = 150
+ocr_timeout = 18
+fail_amount = 4

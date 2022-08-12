@@ -1,0 +1,53 @@
+TEST STARTED AT: [2022/08/12-12:30:59]
+-------------------------------------------------------------------------------
+TEST TERMINATED AT TRIAL 1/2: [2022/08/12-12:31:05]
+SUCCESS RATE: 0%
+
+-------------------------------------------------------------------------------
+ERROR ON TRIAL 1/2
+TIMESTAMP: [2022/08/12-12:31:05]
+ERROR: FAILED TO FIND OCR KEY "wait" AFTER ACTION
+[ATTEMPT 1]
+
+
+OCR READINGS:
+   READING: "swipe,tap,orinsertcardtostart"
+   READING: "swipe,tap,orinsertcardtostart"
+   READING: "“wipe,tap,orinsertcardtostart"
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""
+   READING: ""

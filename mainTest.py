@@ -24,7 +24,7 @@ def start_Google_drive():
     gauth.LocalWebserverAuth()
     drive = GoogleDrive(gauth)
     
-# Function to start vending server
+# Function to start vending ssh
 def start_ssh_server():
     global client,ssh_command
     ssh_command = "tail -n 200 /data2/log/yitunnel-all.log"
@@ -42,13 +42,13 @@ cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 cap.set(cv2.CAP_PROP_FPS, 30)
 
 # Initialize Relays
-TAP = 3
-COOLER = 4
-INSERT_A = 20
+TAP = 3 # Tapper
+COOLER = 4 # Cooler power
+INSERT_A = 20 # Card insert actuator
 INSERT_B = 26
-NFC_A = 22
+NFC_A = 22 # NFC actuator
 NFC_B = 27
-STEP_POWER = 17
+STEP_POWER = 17 # Power for stepper driver
 DIR = 23   # Direction GPIO Pin
 STEP = 24  # Step GPIO Pin
 CW = 1     # Clockwise Rotation
@@ -66,7 +66,6 @@ GPIO.setup(DIR, GPIO.OUT)
 GPIO.setup(STEP, GPIO.OUT)
 
 GPIO.output(TAP, GPIO.HIGH)
-#GPIO.output(STEP_POWER, GPIO.HIGH)
 GPIO.output(COOLER, GPIO.HIGH)
 GPIO.output(INSERT_A, GPIO.HIGH)
 GPIO.output(INSERT_B, GPIO.HIGH)
@@ -77,6 +76,9 @@ GPIO.setup(NFC_B, GPIO.HIGH)
 quitting = False
 time_name = ''
 trial_amount = ''
+color_thresh = 150
+ocr_timeout = 18
+fail_amount = 4
 drive_on = False
 drive = 0
 ssh_on = False
@@ -98,7 +100,7 @@ current_dimensions = [0,int(cap.get(4)),0,int(cap.get(4))]
 current_reading = ''
 
 
-# Read instruction file
+# Read instruction file and put it into 'commands' list
 def parse_instruct_file(path = 'instruct.txt'):
     global commands
     if(path == ''):
@@ -115,9 +117,23 @@ def parse_instruct_file(path = 'instruct.txt'):
                 temp.append(coms)
             commands.append(temp)
 
+# Read settings file and set all variables to specified values
+def read_settings():
+    global color_thresh,ocr_timeout,fail_amount
+    with open('settings.txt', 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            line = line.split()
+            if(line[0] == 'color_thresh'):
+                color_thresh = int(line[2])
+            if(line[0] == 'ocr_timeout'):
+                ocr_timeout = int(line[2])
+            if(line[0] == 'fail_amount'):
+                fail_amount = int(line[2])
+
 # Function for reading words on current screen and drawing it onto frame
 def scan():
-    global quitting,current_key,current_dimensions,frame_log,current_reading,cap
+    global quitting,color_thresh,current_key,current_dimensions,frame_log,current_reading,cap
     while(True):
         # Quit program if 'x' key is pressed or quitting varible true
         if(quitting == True):
@@ -131,19 +147,18 @@ def scan():
 
         ret, frame = cap.read() # Capture frame-by-frame
         reading = ""
-        # Crop frame
+      
         cropFrame = frame[int(current_dimensions[0]):int(current_dimensions[1]),int(current_dimensions[2]):int(current_dimensions[3])]
         gray = cv2.cvtColor(cropFrame, cv2.COLOR_BGR2GRAY) # convert to grayscale
-        ret, bw = cv2.threshold(gray, 150,255, cv2.THRESH_BINARY) # convert text to black and everything else white (150!!!!!!)
-        #cv2.startWindowThread()
-        #cv2.namedWindow("bw")
-        #cv2.imshow('bw',bw)
+        ret, bw = cv2.threshold(gray,color_thresh,255, cv2.THRESH_BINARY) # convert text to white and everything else black
 
-        data = pytesseract.image_to_data(bw, lang = 'eng', nice = 0, output_type=Output.DICT)
-        n_boxes = len(data['text'])
-
+        data = pytesseract.image_to_data(bw, lang = 'eng', nice = 0, output_type=Output.DICT) # Actual function to do OCR
+        
         frame = cv2.putText(frame, ('SEARCHING FOR: "' + current_key + '"'), (10,20), cv2.FONT_HERSHEY_PLAIN, 1.2,(0, 0, 255), 2)
+        # Drawing portion where OCR is scanning
         frame = cv2.rectangle(frame, (int(current_dimensions[2]), int(current_dimensions[0])), (int(current_dimensions[3]), int(current_dimensions[1])), (255, 255, 255), 2)
+        # Drawing words and word boxes onto frame
+        n_boxes = len(data['text'])
         for i in range(n_boxes):
             if int(float(data['conf'][i])) > 60:
                 (text, x, y, w, h) = (data['text'][i], data['left'][i], data['top'][i], data['width'][i], data['height'][i])
@@ -159,7 +174,7 @@ def scan():
         cv2.namedWindow("frame")
         cv2.imshow("frame", frame)
         cv2.waitKey(1)
-        sleep(.5)
+        #sleep(.2)
 
     cap.release()
     cv2.destroyAllWindows()
@@ -172,43 +187,33 @@ def tap():
     sleep(.2)
     GPIO.output(TAP, GPIO.HIGH)
             
-# Functions for opening and closing door
-def open_door():
-    global current_dimensions
+# Function for opening door
+def open_door(sec):
     print("OPENING DOOR...")
     GPIO.output(DIR, CW)
-    #current_dimensions = [310,340,200,350]
-    #current_key = 'cancel'
     start = time.time()
-    while((time.time()-start) < 5):
+    while((time.time()-start) < sec):
         GPIO.output(STEP, GPIO.HIGH)
         sleep(.0001)
         GPIO.output(STEP, GPIO.LOW)
-        #if('cancel' in current_reading):
-            #break
     return True
 
-def close_door():
-    global current_dimensions,current_key, current_reading
+# Function for closing door
+def close_door(sec):
+    global current_dimensions,current_key,current_reading
     print("CLOSING DOOR...")
     GPIO.output(DIR, CCW)
     current_dimensions = [250,300,200,350]
     start = time.time()
-    while((time.time()-start) < 5):
+    while((time.time()-start) < sec):
         GPIO.output(STEP, GPIO.HIGH)
         sleep(.0001)
         GPIO.output(STEP, GPIO.LOW)
-        if('done' in current_reading):
+        if('done' in current_reading): # If 'done' is on screen then automatically stop closing door
             break
-    #GPIO.output(STEP_POWER, GPIO.HIGH)
-    #start = time.time()
-    #current_key = 'done'
-    #while((time.time()-start) < 15):
-    #    if('done' in current_reading):
-    #        break
-    #GPIO.output(STEP_POWER, GPIO.LOW)
     return True
 
+# Function to insert card
 def insert_in():
     print("INSERTING CARD...")
     GPIO.output(INSERT_A, GPIO.LOW)
@@ -216,6 +221,7 @@ def insert_in():
     sleep(2)
     GPIO.output(INSERT_A, GPIO.HIGH)
 
+# Function to remove card
 def insert_out():
     print("RETRACTING CARD...")
     GPIO.output(INSERT_A, GPIO.HIGH)
@@ -223,6 +229,7 @@ def insert_out():
     sleep(2)
     GPIO.output(INSERT_B, GPIO.HIGH)
 
+# Function to put NFC above reader
 def NFC_on():
     print("PUTTING NFC ON READER...")
     GPIO.output(NFC_A, GPIO.LOW)
@@ -230,6 +237,7 @@ def NFC_on():
     sleep(2)
     GPIO.output(NFC_A, GPIO.HIGH)
 
+# Function to remove NFC from reader
 def NFC_off():
     print("TAKING NFC OFF READER...")
     GPIO.output(NFC_A, GPIO.HIGH)
@@ -257,7 +265,6 @@ def restart_cooler(ocr_key):
     if(ssh_on):
         start_ssh_server()
         
-
 # Function to check if specified key is in the vending ssh log and returns log
 def read_ssh(key):
     global ssh_correct
@@ -305,22 +312,6 @@ def read_daq(sec, channel, thresh, comparator):
     task.close()
     return False
 
-# Check daq to see if door is closed and close it if its not
-#if(drive_on and read_daq(.5,'ai0',2.2,'>')):
-#    print('DOOR OPEN BEFORE TESTING STARTED: CLOSING DOOR...')
-#    GPIO.output(DOOR_A, GPIO.HIGH)
-#    GPIO.output(DOOR_B, GPIO.LOW)
-#    sleep(4)
-#    GPIO.output(DOOR_A, GPIO.HIGH)
-#    GPIO.output(DOOR_B, GPIO.HIGH)
-
-def change_permissions_recursive(path, mode):
-    for root, dirs, files in os.walk(path, topdown=False):
-        for dir in [os.path.join(root,d) for d in dirs]:
-            os.chmod(dir, mode)
-    for file in [os.path.join(root, f) for f in files]:
-            os.chmod(file, mode)
-
 # Function for terminating program
 def quit_run():
     global trial,succ_rate,cap,trial_amount,quitting,drive_on,ssh_on,drive,time_name,folder_path
@@ -335,12 +326,13 @@ def quit_run():
     
     
     if(drive_on):
-        shutil.move('error_log.txt', time_name)
+        shutil.move('error_log.txt', time_name) # move error log to folder where error videos are stored
         
+        # Create folder in google drive
         folder = drive.CreateFile({'title': time_name, 'mimeType': 'application/vnd.google-apps.folder'})
         folder.Upload()
         id = folder['id']
-
+        # Move error log and all error videos to google drive folder
         for filename in os.listdir(time_name):
             f = os.path.join(time_name, filename)
             f1 = drive.CreateFile({'title': filename, "parents": [{"id": id, "kind": "drive#childList"}]})
@@ -362,12 +354,12 @@ def write_error(msg, ocr_log = [], daq_log = [], ssh_log = '', frame = []):
     log.write('\nTIMESTAMP: [' + err_time + ']\n')
     log.write(msg)
 
-    
+    # Write everything the OCR was reading during error if there was any readings
     if(ocr_log):
         log.write('\n\nOCR READINGS:')
         for line in ocr_log:
             log.write('\n   READING: "' + line + '"')
-
+    # Write everything the DAQ was reading during error if there was any readings
     if(daq_log):
         log.write('\n\nDAQ READINGS:')
         for line in daq_log:
@@ -375,16 +367,16 @@ def write_error(msg, ocr_log = [], daq_log = [], ssh_log = '', frame = []):
     log.close()
 
 
-def do_action(action, ocr_flag, ocr_crop, ocr_key, sec):
-    global quitting,ocr_correct, ocr_log, current_reading, current_dimensions, current_key
+def do_action(action, ocr_flag, ocr_crop, ocr_key):
+    global quitting,ocr_correct,ocr_log,current_reading,current_dimensions,current_key
     
     # Handler for each type of action
     if(action == 'tap'):
         tap()
     elif(action == 'open_door'):
-        open_door()
+        open_door(sec)
     elif(action == 'close_door'):
-        close_door()
+        close_door(sec)
     elif(action == 'insert_in'):
         insert_in()
     elif(action == 'insert_out'):
@@ -400,11 +392,11 @@ def do_action(action, ocr_flag, ocr_crop, ocr_key, sec):
         ocr_correct = False
         start = time.time()
 
-        while((time.time()-start) < sec):
+        while((time.time()-start) < 5):
             if(quitting == True):
                 exit()
             if(keyboard.is_pressed('x')):
-                #quitting = True
+                quitting = True
                 quit_run()
 
             ocr_log.append(current_reading)
@@ -415,16 +407,16 @@ def do_action(action, ocr_flag, ocr_crop, ocr_key, sec):
                 ocr_correct = True
                 return True
             sleep(.1)
-    else:
+    # If OCR flag is 0 then move on
+    else: 
         ocr_correct = True
         return True
-    return True
 
 # Function to run trial
 def process_command(command):
-    global quitting,trial,ocr_correct,ssh_correct,daq_correct,ocr_log,daq_log,ssh_log,current_reading,current_key,current_dimensions,ssh_on,daq_on
+    global quitting,trial,ocr_correct,ssh_correct,daq_correct,ocr_log,daq_log,ssh_log,current_reading,current_key,current_dimensions,ssh_on,daq_on,ocr_timeout
 
-    # Assigning correct values to attributes
+    # Assigning correct values to all variables
     current_key = command[0][0][1:-1]
     current_dimensions =  command[0][1][1:-1].split(':')
     action = command[1][0]
@@ -444,11 +436,6 @@ def process_command(command):
         daq_compare = command[4][0].split(':')[1][0]
         daq_thresh = command[4][0].split(':')[1][1:]
     
-    #print(crop)
-    #current_dimensions = [int(crop[0]), int(crop[1]), int(crop[2]), int(crop[3])]
-
-    #action,ocr_flag,ocr_key,ssh_flag,ssh_key,daq_flag,daq_channel,daq_compare,daq_thresh = assign(command,crop)
-
     starttime = time.time()
     ocr_log =[]
     frame = 0
@@ -459,22 +446,25 @@ def process_command(command):
         # Quit program if quitting variable true
         if(quitting == True):
             exit()
+        if(keyboard.is_pressed('x')):
+            quitting = True
+            quit_run()
 
         print('   READING: "' + current_reading + '"')
         ocr_log.append(current_reading)
         
-        # Handler for when the ocr keyword is detected on the current screen
+        # Break when the ocr keyword is detected on the current screen
         if(current_key in current_reading):
             print('KEYWORD "' + current_key + '" FOUND')
             break
         
         # Skip to next screen and send error report if ocr key isn't detected within set time
-        if((time.time()-starttime) > 18):
+        if((time.time()-starttime) > ocr_timeout):
             msg = 'ERROR: TOOK TOO LONG TO FIND KEYWORD "' + current_key + '" TO START COMMAND, SKIPPING TO NEXT COMMAND'
             print(msg)
 
             global last_error
-            if(trial != last_error):
+            if(trial != last_error): # Make sure to only write error if its the first error of trial
                 write_error(msg, ocr_log = ocr_log)
                 last_error = trial
                 if(action == 'close_door'):
@@ -491,7 +481,7 @@ def process_command(command):
         print('ATTEMPT ' + str(attempt) + ':')
 
         # Start seperate threads for action, reading daq, and reading ssh so they run concurrently
-        t1 = threading.Thread(target=do_action, args=(action,ocr_flag,ocr_crop,ocr_key,5))
+        t1 = threading.Thread(target=do_action, args=(action,ocr_flag,ocr_crop,ocr_key))
         t1.start()
         t1.join()
 
@@ -526,6 +516,7 @@ def process_command(command):
                 ssh_pass = False
         msg += ('[ATTEMPT ' + str(attempt) + ']\n')
 
+        # If OCR, DAQ, and ssh pass then mark screen as success 
         if(ocr_pass and daq_pass and ssh_pass):
             return True
         else:
@@ -541,7 +532,7 @@ def process_command(command):
 
 ##------------------ MAIN LOOP --------------------
 def run(trial_amount):
-    global trial,frame_log,commands,successes,folder_path,succ_rate,current_key,start,time_name
+    global trial,fail_amount,frame_log,commands,successes,folder_path,succ_rate,current_key,start,time_name
     repeat_fails = 0
     while(trial < int(trial_amount)):
         trial += 1
@@ -581,9 +572,9 @@ def run(trial_amount):
         print('SUCCESS RATE: ' + str(succ_rate) + '%')
 
         # If trials fail 4 times in a row then restart cooler
-        if(repeat_fails == 4):
+        if(repeat_fails == fail_amount):
             restart_cooler(ocr_key = 'TAP')
-        if(repeat_fails == 6):
+        if(repeat_fails == fail_amount+2):
             msg = 'FAILED 2 TIMES AFTER REBOOT. MANUALLY TERMINATING...'
             print(msg)
             write_error(msg = msg)
@@ -594,10 +585,11 @@ def run(trial_amount):
 
 def main():
     global time_name,drive_on,ssh_on,daq_on,folder_path,start,trial_amount
+    read_settings()
     path = input("Input instruction file path: ")
     parse_instruct_file(path)
 
-    # User chooses wether to save log and error videos to drive 
+    # User chooses wether to save log and serror videos to drive 
     save_inp = input('Save error log and videos to drive?(y/n): ')
     ssh_inp = input('Read vending log?(y/n): ')
     daq_inp = input('Read DAQ?(y/n): ')
@@ -617,17 +609,14 @@ def main():
         drive_on = True
         #folder_path = os.path.join("D:/ErrorLog/", time_name)
         os.mkdir(time_name, mode = 0o777)
-        print(oct(os.stat(time_name).st_mode))
         start_Google_drive()
-    
 
     # Wipe error log text file
     log = open("error_log.txt", "w")
     log.write("TEST STARTED AT: [" + str(time.strftime("%Y/%m/%d-%H:%M:%S")) + ']')
     log.close()
 
-
-    # Run program and text detecter concurrently
+    # Run program and OCR concurrently
     t1 = threading.Thread(target=run, args = (trial_amount,))
     t2 = threading.Thread(target=scan)
     t1.start()
