@@ -11,7 +11,7 @@ cap.set(cv2.CAP_PROP_FPS, 60)
 width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 print('Width and Height of frame: [' + str(width) + ":" + str(height) + ']')
-
+#c
 current_dimensions = [300,400,200,400] # Portion of frame to scan (y1,y2,x1,x2)
 color_thresh = 150 # BW color threshhold
 
