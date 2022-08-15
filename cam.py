@@ -5,12 +5,12 @@ import time
 from time import sleep
 #import RTk.GPIO as GPIO
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0) # If camera is not working try switching to 1 instead of 0
 cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 cap.set(cv2.CAP_PROP_FPS, 60)
 width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-print('Width and Height of frame: ' + str(width) + "," + str(height))
+print('Width and Height of frame: [' + str(width) + ":" + str(height) + ']')
 
 current_dimensions = [300,400,200,400] # Portion of frame to scan (y1,y2,x1,x2)
 color_thresh = 150 # BW color threshhold
