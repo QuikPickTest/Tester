@@ -2,3 +2,4 @@ color_thresh = 150
 ocr_timeout = 18
 fail_amount = 4
 time_door_open = 5
+video_id = 0

@@ -27,7 +27,7 @@ def start_Google_drive():
 # Function to start vending ssh
 def start_ssh_server():
     global client,ssh_command
-    ssh_command = "tail -n 200 /data2/log/yitunnel-all.log"
+    ssh_command = "tail -n 200 /data2/log/yitunnel-all.log" # Command to run on cooler computer - looks at past 200 lines in log
     host = "192.168.2.100"
     username = "sandstar"
     password = "Xe08v0Zy"
@@ -64,7 +64,7 @@ GPIO.setup(NFC_A, GPIO.OUT)
 GPIO.setup(NFC_B, GPIO.OUT)
 GPIO.setup(DIR, GPIO.OUT)
 GPIO.setup(STEP, GPIO.OUT)
-
+# Need to set them all high because they default as on (which is GPIO.LOW)
 GPIO.output(TAP, GPIO.HIGH)
 GPIO.output(COOLER, GPIO.HIGH)
 GPIO.output(INSERT_A, GPIO.HIGH)
@@ -80,6 +80,7 @@ color_thresh = 150
 ocr_timeout = 18
 fail_amount = 4
 time_door_open = 5
+video_id = 0
 drive_on = False
 drive = 0
 ssh_on = False
@@ -120,7 +121,7 @@ def parse_instruct_file(path = 'instruct.txt'):
 
 # Read settings file and set all variables to specified values
 def read_settings():
-    global color_thresh,ocr_timeout,fail_amount
+    global color_thresh,ocr_timeout,fail_amount,video_id
     with open('settings.txt', 'r') as f:
         lines = f.readlines()
         for line in lines:
@@ -133,6 +134,8 @@ def read_settings():
                 fail_amount = int(line[2])
             elif(line[0] == 'time_door_open'):
                 time_door_open = int(line[2])
+            elif(line[0] == 'video_id'):
+                video_id = int(line[2])
 
 
 # Function for reading words on current screen and drawing it onto frame
