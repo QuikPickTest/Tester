@@ -12,8 +12,8 @@ width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 print('Width and Height of frame: [' + str(width) + ":" + str(height) + ']')
 #c
-current_dimensions = [300,400,200,400] # Portion of frame to scan (y1,y2,x1,x2)
-color_thresh = 150 # BW color threshhold
+current_dimensions = [300,450,120,400] # Portion of frame to scan (y1,y2,x1,x2)
+color_thresh = 225 # BW color threshhold
 
 while True:
     
@@ -23,7 +23,7 @@ while True:
 
     gray = cv2.cvtColor(cropFrame, cv2.COLOR_BGR2GRAY) # Converts to grayscale
     #cv2.imshow('gray', gray)
-    ret, bw = cv2.threshold(gray,150,255, cv2.THRESH_BINARY)
+    ret, bw = cv2.threshold(gray,color_thresh,255, cv2.THRESH_BINARY)
     cv2.startWindowThread()
     cv2.namedWindow("BW portion of frame being scanned")
     cv2.moveWindow("BW portion of frame being scanned", 700, 50)

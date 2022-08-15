@@ -14,10 +14,10 @@ from nidaqmx.constants import TerminalConfiguration
 import threading
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
+import subprocess
 GPIO.setwarnings(False)
 
-import subprocess
-
+# Start google drive
 def start_Google_drive():
     global drive
     gauth = GoogleAuth()
@@ -65,7 +65,7 @@ GPIO.setup(NFC_B, GPIO.OUT)
 GPIO.setup(DIR, GPIO.OUT)
 GPIO.setup(STEP, GPIO.OUT)
 # Need to set them all high because they default as on (which is GPIO.LOW)
-GPIO.output(TAP, GPIO.HIGH)
+GPIO.output(TAP, GPIO.HIGH) ## HIGH MEANS LOW!!!
 GPIO.output(COOLER, GPIO.HIGH)
 GPIO.output(INSERT_A, GPIO.HIGH)
 GPIO.output(INSERT_B, GPIO.HIGH)
@@ -157,7 +157,7 @@ def scan():
       
         cropFrame = frame[int(current_dimensions[0]):int(current_dimensions[1]),int(current_dimensions[2]):int(current_dimensions[3])]
         gray = cv2.cvtColor(cropFrame, cv2.COLOR_BGR2GRAY) # convert to grayscale
-        ret, bw = cv2.threshold(gray,color_thresh,255, cv2.THRESH_BINARY) # convert text to white and everything else black
+        ret, bw = cv2.threshold(gray,color_thresh, 255, cv2.THRESH_BINARY) # convert text to white and everything else black (beige/white = 225)
 
         data = pytesseract.image_to_data(bw, lang = 'eng', nice = 0, output_type=Output.DICT) # Actual function to do OCR
         
@@ -382,9 +382,9 @@ def do_action(action, ocr_flag, ocr_crop, ocr_key):
     if(action == 'tap'):
         tap()
     elif(action == 'open_door'):
-        open_door(sec)
+        open_door()
     elif(action == 'close_door'):
-        close_door(sec)
+        close_door()
     elif(action == 'insert_in'):
         insert_in()
     elif(action == 'insert_out'):
